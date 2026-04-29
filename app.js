@@ -713,24 +713,133 @@ function handleFile(file) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = ev => {
-    visionPreview.innerHTML = `<img src="${ev.target.result}" alt="茶汤" />`;
-    runVisionAnalysis();
+    visionPreview.innerHTML = `<img src="${ev.target.result}" alt="茶汤" id="visionImg" />`;
+    const img = document.getElementById('visionImg');
+    if (img.complete) runVisionAnalysis(img);
+    else img.onload = () => runVisionAnalysis(img);
   };
   reader.readAsDataURL(file);
 }
-function runVisionAnalysis() {
-  visionResult.innerHTML = '<div class="empty">🤖 ViT 视觉模型分析中...</div>';
+
+// 真实图像分析 — Canvas 像素级运算
+function analyzeImage(img) {
+  const canvas = document.createElement('canvas');
+  const W = 200, H = 200;
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, W, H);
+  const data = ctx.getImageData(0, 0, W, H).data;
+
+  // 1. 提取「茶汤区域」像素 — 排除接近白/灰的背景与高亮反光
+  const teaPixels = [];
+  for (let i=0;i<data.length;i+=4) {
+    const r=data[i], g=data[i+1], b=data[i+2];
+    const max=Math.max(r,g,b), min=Math.min(r,g,b);
+    const sat = max === 0 ? 0 : (max-min)/max;
+    const lightness = (r+g+b)/3;
+    if (lightness > 30 && lightness < 245 && sat > 0.15) teaPixels.push([r,g,b]);
+  }
+  if (teaPixels.length < 100) return { error: '未检测到明显茶汤区域，请确保图片中茶汤占主体' };
+
+  // 2. 平均 RGB
+  const sum = teaPixels.reduce((a,p)=>[a[0]+p[0],a[1]+p[1],a[2]+p[2]],[0,0,0]);
+  const n = teaPixels.length;
+  const avgR = sum[0]/n, avgG = sum[1]/n, avgB = sum[2]/n;
+
+  // 3. RGB → HSV
+  function rgb2hsv(r,g,b) {
+    r/=255; g/=255; b/=255;
+    const max=Math.max(r,g,b), min=Math.min(r,g,b), d=max-min; let h=0;
+    if (d!==0) {
+      if (max===r) h=((g-b)/d)%6;
+      else if (max===g) h=(b-r)/d+2;
+      else h=(r-g)/d+4;
+      h*=60; if (h<0) h+=360;
+    }
+    return { h, s: max===0?0:d/max, v: max };
+  }
+  const hsv = rgb2hsv(avgR,avgG,avgB);
+
+  // 4. RGB → CIE Lab
+  function rgb2lab(r,g,b) {
+    r/=255; g/=255; b/=255;
+    [r,g,b]=[r,g,b].map(c=>c>0.04045?Math.pow((c+0.055)/1.055,2.4):c/12.92);
+    const x=(r*0.4124+g*0.3576+b*0.1805)/0.95047;
+    const y=(r*0.2126+g*0.7152+b*0.0722)/1.00000;
+    const z=(r*0.0193+g*0.1192+b*0.9505)/1.08883;
+    const f=t=>t>0.008856?Math.cbrt(t):(7.787*t+16/116);
+    const fx=f(x), fy=f(y), fz=f(z);
+    return [116*fy-16, 500*(fx-fy), 200*(fy-fz)];
+  }
+  const lab = rgb2lab(avgR, avgG, avgB);
+  // 武夷岩茶（大红袍）标准琥珀色 Lab 参考值（≈ #B26337）
+  const REF_LAB = [50, 30, 40];
+  const dE = Math.sqrt(
+    Math.pow(lab[0]-REF_LAB[0],2) +
+    Math.pow(lab[1]-REF_LAB[1],2) +
+    Math.pow(lab[2]-REF_LAB[2],2)
+  );
+
+  // 5. 标准差（通透度）
+  const variance = teaPixels.reduce((acc,p) =>
+    acc + Math.pow(p[0]-avgR,2) + Math.pow(p[1]-avgG,2) + Math.pow(p[2]-avgB,2), 0) / n / 3;
+  const stdDev = Math.sqrt(variance);
+
+  // 6. 评分
+  const clamp = v => Math.max(0, Math.min(100, v));
+  const colorScore = Math.round(clamp(100 - dE * 1.6));
+  const clarityScore = Math.round(clamp(100 - stdDev * 0.9));
+  const idealV = 0.55, idealS = 0.55;
+  const concDist = Math.sqrt(Math.pow(hsv.v - idealV, 2) + Math.pow(hsv.s - idealS, 2));
+  const concScore = Math.round(clamp(100 - concDist * 180));
+  const concEstimate = (hsv.v < 0.4 ? '过浓' : (hsv.v > 0.7 ? '偏淡' : '适中'));
+  const weightEst = (5 + (1 - hsv.v) * 8).toFixed(1);
+
+  let timingScore, timingHint;
+  if (hsv.h >= 15 && hsv.h <= 35) {
+    timingScore = 92;
+    timingHint = '色相 H=' + hsv.h.toFixed(0) + '° 处于岩茶最佳区间（15-35°），出汤时机精准。';
+  } else if (hsv.h < 15 || hsv.h > 50) {
+    timingScore = 70;
+    timingHint = '色相 H=' + hsv.h.toFixed(0) + '° 偏离岩茶最佳区间，建议下一泡' + (hsv.h < 15 ? '提前出汤' : '延长 3-5 秒') + '。';
+  } else {
+    timingScore = 82;
+    timingHint = '色相 H=' + hsv.h.toFixed(0) + '°，略偏黄棕，可延长 2 秒强化岩骨。';
+  }
+
+  return {
+    pixels: n,
+    avgRgb: [Math.round(avgR), Math.round(avgG), Math.round(avgB)],
+    hex: '#' + [avgR,avgG,avgB].map(v=>Math.round(v).toString(16).padStart(2,'0')).join(''),
+    lab, dE, hsv, stdDev,
+    scores: [
+      { name: '色泽', score: colorScore,
+        tip: `平均 Lab=(${lab[0].toFixed(1)}, ${lab[1].toFixed(1)}, ${lab[2].toFixed(1)})；与岩茶标准琥珀色 ΔE=${dE.toFixed(1)} ${dE<5?'(优秀)':dE<10?'(良好)':dE<20?'(需调整)':'(偏离较大)'}` },
+      { name: '通透度', score: clarityScore,
+        tip: `茶汤区域像素标准差 σ=${stdDev.toFixed(1)}；${stdDev<15?'清亮通透':stdDev<30?'轻微浑浊':'明显悬浮'}` },
+      { name: '浓度', score: concScore,
+        tip: `HSV 饱和度 S=${(hsv.s*100).toFixed(0)}%、明度 V=${(hsv.v*100).toFixed(0)}%；浓度${concEstimate}，估算投茶 ${weightEst}g（标准 8g）` },
+      { name: '出汤时机', score: timingScore, tip: timingHint }
+    ]
+  };
+}
+
+function runVisionAnalysis(img) {
+  visionResult.innerHTML = '<div class="empty">🔍 视觉分析中 · 像素级 RGB / HSV / Lab / 标准差实时计算...</div>';
   setTimeout(() => {
-    const scores = [
-      { name: '色泽', score: 86 + Math.floor(Math.random()*10), tip: 'CIE Lab 色差 ΔE=2.3 接近大红袍标准琥珀色，火工偏中火。' },
-      { name: '通透度', score: 90 + Math.floor(Math.random()*8), tip: '茶汤清亮无悬浮，无沉淀，符合 SOP 出汤标准。' },
-      { name: '投茶量', score: 75 + Math.floor(Math.random()*15), tip: '叶底估算 7.6g，标准 8g（盖碗 110ml），可补 0.4g。' },
-      { name: '出汤时机', score: 88 + Math.floor(Math.random()*8), tip: '汤色饱和度推算 出汤时间约 9.5s，建议第 1 泡 5-6s 更佳。' }
-    ];
-    const overall = Math.round(scores.reduce((s,x)=>s+x.score,0)/scores.length);
+    let r;
+    try { r = analyzeImage(img); }
+    catch(e) { visionResult.innerHTML = '<div class="empty" style="color:var(--red)">⚠️ 分析失败：' + e.message + '</div>'; return; }
+    if (r.error) { visionResult.innerHTML = `<div class="empty" style="color:var(--red)">⚠️ ${r.error}</div>`; return; }
+    const overall = Math.round(r.scores.reduce((s,x)=>s+x.score,0)/r.scores.length);
     visionResult.innerHTML = `
-      <h3>📷 茶汤 AI 评分（多任务 ViT）</h3>
-      ${scores.map(s => `
+      <h3>📷 茶汤 AI 评分（Canvas 像素级真实分析）</h3>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;font-size:11px;color:var(--ink-3);flex-wrap:wrap">
+        <span>检测像素 <b style="color:var(--red)">${r.pixels.toLocaleString()}</b></span><span>·</span>
+        <span>平均色 <span style="display:inline-block;width:14px;height:14px;background:${r.hex};border:1px solid #ddd;border-radius:3px;vertical-align:middle"></span> <code style="background:#fdf6f6;padding:1px 4px;border-radius:3px;color:var(--red)">${r.hex}</code></span>
+        <span>·</span><span>RGB(${r.avgRgb.join(',')})</span>
+      </div>
+      ${r.scores.map(s => `
         <div class="score-row">
           <div class="label">${s.name}</div>
           <div class="score-bar"><div style="width:${s.score}%"></div></div>
@@ -740,10 +849,13 @@ function runVisionAnalysis() {
       `).join('')}
       <div class="overall">
         <div class="num">${overall}</div>
-        <div class="label">综合评分 · ${overall>=90?'✅ 达标':'⚠️ 建议复核'}</div>
+        <div class="label">综合评分 · ${overall>=90?'✅ 优秀':overall>=80?'✓ 达标':overall>=70?'⚠️ 待复核':'❌ 不达标'}</div>
+      </div>
+      <div style="margin-top:14px;padding:10px;background:var(--bg-2);border-radius:6px;font-size:11px;color:var(--ink-3);line-height:1.6">
+        <b style="color:var(--red)">⚙️ 技术说明：</b>本 Demo 真实在浏览器执行图像分析 — Canvas 像素采样 → 饱和度+亮度过滤背景 → RGB 均值 → HSV / CIE Lab 转换 → 与岩茶基准色 ΔE 色差、像素方差判通透、HSV 反推浓度、色相判出汤时机。生产环境替换为服务端 ViT 模型（标注 50-100 张/品类即可上线）。
       </div>
     `;
-  }, 1100);
+  }, 400);
 }
 
 // =================================================================
