@@ -286,15 +286,45 @@ main { padding: 28px 32px 80px; max-width: 1400px; margin: 0 auto; position: rel
 .faq-item { background: white; padding: 10px 12px; margin: 8px 0; border-radius: 6px; border-left: 2px solid var(--red); font-size: 12.5px; line-height: 1.7; border: 1px solid var(--line); border-left-width: 3px; }
 .faq-item b { color: var(--red); }
 
-/* Brewing Simulator */
-.brew-sim { background: white; border: 1px solid var(--line); padding: 16px; border-radius: 10px; margin-top: 12px; }
-.brew-sim h4 { color: var(--red); font-size: 13px; margin-bottom: 10px; font-weight: 700; }
-.brew-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
-.brew-controls button { background: linear-gradient(135deg, var(--red), var(--red-deep)); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 700; font-family: inherit; font-size: 12px; }
-.brew-controls button:disabled { opacity: .4; cursor: not-allowed; }
-.brew-controls .meta-info { color: var(--ink-2); font-size: 12px; }
-.brew-canvas-wrap { background: var(--bg-2); border-radius: 8px; padding: 12px; border: 1px solid var(--line); }
-.brew-canvas-wrap canvas { display: block; max-width: 100%; }
+/* ===== Brewing Simulator (升级版 SVG 盖碗) ===== */
+.brew-sim { background: linear-gradient(180deg, #fff 0%, #fdfaf5 100%); border: 1px solid var(--line); padding: 18px; border-radius: 12px; margin-top: 12px; }
+.brew-params { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+.param-cell { background: var(--red-soft); border: 1px solid #f5cfcd; padding: 10px; border-radius: 8px; text-align: center; }
+.param-k { font-size: 11px; color: var(--ink-3); letter-spacing: 1px; margin-bottom: 4px; }
+.param-v { font-size: 22px; color: var(--red); font-weight: 700; font-family: "Songti SC", serif; }
+.param-v small { font-size: 11px; color: var(--ink-3); font-weight: 400; margin-left: 2px; }
+
+.brew-stage { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 14px; }
+@media (max-width: 760px) { .brew-stage { grid-template-columns: 1fr; } }
+.brew-scene { background: linear-gradient(180deg, #fdfaf5 0%, #f5ede2 100%); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-height: 260px; display: flex; align-items: center; justify-content: center; }
+.brew-scene svg { width: 100%; max-width: 600px; height: auto; }
+.brew-info { background: white; border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.brew-step-tag { display: inline-block; padding: 6px 14px; border-radius: 16px; font-size: 12px; font-weight: 700; text-align: center; letter-spacing: 1px; }
+.brew-step-tag.idle { background: var(--bg-3); color: var(--ink-3); }
+.brew-step-tag.active { background: linear-gradient(135deg, var(--red), var(--red-deep)); color: white; box-shadow: 0 2px 8px rgba(200,48,44,.25); }
+.brew-step-tag.done { background: linear-gradient(135deg, var(--jade), #4a7c40); color: white; }
+.brew-timer { font-size: 30px; color: var(--red); font-family: "Songti SC", serif; font-weight: 700; text-align: center; line-height: 1.1; }
+.brew-timer small { font-size: 14px; color: var(--ink-3); font-weight: 400; margin: 0 4px; }
+.brew-hint { font-size: 13px; color: var(--ink); padding: 10px; background: var(--red-soft); border-radius: 8px; min-height: 50px; line-height: 1.6; }
+.brew-bar { height: 6px; background: var(--bg-3); border-radius: 3px; overflow: hidden; }
+.brew-bar > div { height: 100%; background: linear-gradient(90deg, var(--red), var(--red-deep)); transition: width .15s linear; width: 0%; }
+
+.brew-timeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 6px; margin-bottom: 14px; }
+.tl-cell { background: var(--bg-2); border: 1px solid var(--line); padding: 8px; border-radius: 6px; cursor: pointer; transition: .2s; text-align: center; }
+.tl-cell:hover { border-color: var(--red); transform: translateY(-1px); }
+.tl-cell.tl-current { background: linear-gradient(135deg, var(--red), var(--red-deep)); color: white; border-color: var(--red); }
+.tl-cell.tl-current .tl-num, .tl-cell.tl-current .tl-time, .tl-cell.tl-current .tl-hint { color: white; }
+.tl-cell.tl-past { background: var(--jade-soft); border-color: var(--jade); }
+.tl-cell.tl-past .tl-num { color: var(--jade); }
+.tl-num { font-size: 11px; color: var(--red); font-weight: 700; }
+.tl-time { font-size: 14px; color: var(--ink); font-weight: 700; font-family: monospace; margin: 2px 0; }
+.tl-hint { font-size: 10px; color: var(--ink-3); line-height: 1.3; }
+
+.brew-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.brew-controls button { background: white; color: var(--ink); border: 1px solid var(--line-2); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; font-family: inherit; font-size: 12px; transition: .2s; }
+.brew-controls button:hover { border-color: var(--red); color: var(--red); }
+.brew-controls .btn-primary { background: linear-gradient(135deg, var(--red), var(--red-deep)); color: white; border-color: var(--red); }
+.brew-controls .btn-primary:hover { color: white; filter: brightness(1.05); }
 
 /* ===== Knowledge Graph ===== */
 .kg-wrap { display: grid; grid-template-columns: 3fr 1fr; gap: 14px; }

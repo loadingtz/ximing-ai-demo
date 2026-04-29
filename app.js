@@ -247,7 +247,7 @@ async function sendMessage() {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 sendBtn.addEventListener('click', sendMessage);
 chatInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendMessage(); });
-appendMsg('您好，我是熹茗 AI 知识中枢助手。已学习全部产品 SOP、《老枞水仙风味标准》、朱子文化体系、销售话术、运营经验。所有回答均带可追溯来源。', 'ai');
+// 欢迎语与推荐问题由 applyRole() 在页面初始化时设置（按当前角色）
 renderSuggest();
 
 // =================================================================
@@ -291,15 +291,32 @@ function showProduct(id) {
       <div class="nutrition-grid">${Object.entries(p.nutrition).map(([k,v])=>`<div class="nutrition-cell"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('')}</div>
     </div>
     <div class="section">
-      <div class="section-title">茶艺冲泡参数 · 标准 SOP</div>
+      <div class="section-title">茶艺冲泡互动模拟器 · 标准 SOP</div>
       <div class="brew-sim" id="brewSim">
-        <h4>🍵 互动茶艺模拟器</h4>
-        <div class="brew-controls">
-          <button id="brewStart">▶ 开始模拟冲泡</button>
-          <button id="brewReset">↺ 重置</button>
-          <span class="meta-info">水温 ${p.brew.water}℃ · 投茶 ${p.brew.weight}g · 盖碗 ${p.brew.gaiwan}ml · 共 ${p.brew.steps.length} 泡</span>
+        <div class="brew-params">
+          <div class="param-cell"><div class="param-k">水温</div><div class="param-v">${p.brew.water}<small>℃</small></div></div>
+          <div class="param-cell"><div class="param-k">投茶</div><div class="param-v">${p.brew.weight}<small>g</small></div></div>
+          <div class="param-cell"><div class="param-k">盖碗</div><div class="param-v">${p.brew.gaiwan}<small>ml</small></div></div>
+          <div class="param-cell"><div class="param-k">总泡数</div><div class="param-v">${p.brew.steps.length}<small>泡</small></div></div>
         </div>
-        <div class="brew-canvas-wrap"><canvas id="brewCanvas" width="780" height="180"></canvas></div>
+        <div class="brew-stage">
+          <div class="brew-scene">
+            <svg id="brewSvg" viewBox="0 0 600 220" xmlns="http://www.w3.org/2000/svg"></svg>
+          </div>
+          <div class="brew-info">
+            <div class="brew-step-tag" id="brewStepTag">未开始</div>
+            <div class="brew-timer"><span id="brewElapsed">0.0</span><small>s</small> / <span id="brewTarget">--</span><small>s</small></div>
+            <div class="brew-hint" id="brewHint">点击「开始」启动冲泡演示</div>
+            <div class="brew-bar"><div id="brewBarFill"></div></div>
+          </div>
+        </div>
+        <div class="brew-timeline" id="brewTimeline"></div>
+        <div class="brew-controls">
+          <button id="brewStart" class="btn-primary">▶ 开始冲泡</button>
+          <button id="brewPause">⏸ 暂停</button>
+          <button id="brewReset">↺ 重置</button>
+          <button id="brewSpeed">⏩ 加速 ×<span id="brewSpeedVal">1</span></button>
+        </div>
       </div>
     </div>
     <div class="section">
@@ -310,77 +327,190 @@ function showProduct(id) {
   bindBrewSim(p);
 }
 
-// 茶艺冲泡模拟器
+// =================================================================
+// 茶艺冲泡模拟器（SVG · 盖碗+公道杯+品茗杯）
+// =================================================================
 function bindBrewSim(p) {
-  const cv = document.getElementById('brewCanvas');
-  const ctx = cv.getContext('2d');
-  let timer = null, currentStep = 0, elapsed = 0;
-  function draw() {
-    const W = cv.width, H = cv.height;
-    ctx.clearRect(0,0,W,H);
-    // 标尺
-    const padL = 60, padR = 20, padT = 30, padB = 40;
-    const cw = W-padL-padR, ch = H-padT-padB;
-    const maxT = Math.max(...p.brew.steps.map(s=>s.time)) * 1.2;
-    ctx.strokeStyle='#3a2c20'; ctx.lineWidth=1;
-    ctx.fillStyle='#7d6e58'; ctx.font='10px monospace';
-    for (let i=0;i<=4;i++){
-      const y = padT + ch*i/4;
-      ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(W-padR,y); ctx.stroke();
-      ctx.fillText(Math.round(maxT*(1-i/4))+'s', 8, y+3);
-    }
-    // 柱状条
-    const bw = cw / p.brew.steps.length * 0.7;
-    const gap = cw / p.brew.steps.length;
-    p.brew.steps.forEach((s, i) => {
-      const x = padL + gap*i + (gap-bw)/2;
-      const h = ch * (s.time/maxT);
-      const y = padT + ch - h;
-      const isCurrent = i === currentStep;
-      const isPast = i < currentStep;
-      const grad = ctx.createLinearGradient(0, y, 0, padT+ch);
-      if (isCurrent) { grad.addColorStop(0,'#e04944'); grad.addColorStop(1,'#9c1f1c'); }
-      else if (isPast) { grad.addColorStop(0,'#7da17c'); grad.addColorStop(1,'#5a8f4f'); }
-      else { grad.addColorStop(0,'#ece4d4'); grad.addColorStop(1,'#d9cdb4'); }
-      ctx.fillStyle = grad; ctx.fillRect(x, y, bw, h);
-      ctx.fillStyle = isCurrent ? '#c8302c' : (isPast ? '#5a8f4f' : '#8a7a68');
-      ctx.font = 'bold 11px sans-serif';
-      ctx.fillText('第'+s.n+'泡', x+4, padT+ch+15);
-      ctx.font = '10px monospace';
-      ctx.fillText(s.time+'s', x+4, padT+ch+27);
-      if (isCurrent) {
-        const progress = Math.min(1, elapsed / s.time);
-        ctx.fillStyle = 'rgba(200,48,44,.25)';
-        ctx.fillRect(x, padT+ch - h*progress, bw, h*progress);
-        ctx.fillStyle = '#c8302c'; ctx.font='bold 11px sans-serif';
-        ctx.fillText(s.hint, x, y - 6);
-      }
-    });
-    ctx.fillStyle='#c8302c'; ctx.font='bold 12px sans-serif';
-    ctx.fillText('出汤时间曲线（s）', padL, 18);
+  const svg = document.getElementById('brewSvg');
+  const stepTag = document.getElementById('brewStepTag');
+  const elapsedEl = document.getElementById('brewElapsed');
+  const targetEl = document.getElementById('brewTarget');
+  const hintEl = document.getElementById('brewHint');
+  const barFill = document.getElementById('brewBarFill');
+  const timeline = document.getElementById('brewTimeline');
+  const speedBtn = document.getElementById('brewSpeed');
+  const speedVal = document.getElementById('brewSpeedVal');
+
+  let timer = null, currentStep = 0, elapsed = 0, paused = false;
+  let phase = 'idle', phaseT = 0, speed = 1;
+
+  function teaColor(idx, alpha=1) {
+    const stages = [[156,60,38],[186,90,50],[206,120,64],[216,144,80],[222,168,102],[228,188,130],[232,204,156]];
+    const i = Math.min(stages.length-1, idx);
+    return `rgba(${stages[i][0]},${stages[i][1]},${stages[i][2]},${alpha})`;
   }
-  draw();
+
+  function renderTimeline() {
+    timeline.innerHTML = p.brew.steps.map((s,i) => {
+      const cls = i === currentStep ? 'tl-current' : (i < currentStep ? 'tl-past' : '');
+      return `<div class="tl-cell ${cls}" data-idx="${i}">
+        <div class="tl-num">第 ${s.n} 泡</div>
+        <div class="tl-time">${s.time}s</div>
+        <div class="tl-hint">${s.hint}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function draw() {
+    const cur = p.brew.steps[currentStep];
+    const total = cur ? cur.time : 1;
+    const progress = Math.min(1, elapsed / total);
+    let gaiwanFill = 0, pitcherFill = 0, cupFill = 0;
+    if (phase === 'pour') gaiwanFill = phaseT;
+    else if (phase === 'steep') gaiwanFill = 1;
+    else if (phase === 'drain') { gaiwanFill = 1 - phaseT; pitcherFill = phaseT; }
+    else if (phase === 'pourCup') { pitcherFill = 1 - phaseT; cupFill = phaseT; }
+    else if (phase === 'done') { cupFill = 1; }
+
+    const colorIdx = Math.min(p.brew.steps.length-1, currentStep);
+    const tea = teaColor(colorIdx, 0.92);
+    const teaLight = teaColor(colorIdx, 0.65);
+
+    svg.innerHTML = `
+      <defs>
+        <linearGradient id="tg-${colorIdx}" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="${teaLight}"/><stop offset="100%" stop-color="${tea}"/>
+        </linearGradient>
+        <radialGradient id="steam"><stop offset="0%" stop-color="rgba(255,255,255,0.8)"/><stop offset="100%" stop-color="rgba(255,255,255,0)"/></radialGradient>
+        <filter id="sd"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#9c1f1c" flood-opacity="0.18"/></filter>
+        <clipPath id="clipG"><path d="M 42 112 Q 42 178 100 183 Q 158 178 158 112 Z"/></clipPath>
+        <clipPath id="clipP"><path d="M 252 132 L 258 193 Q 258 198 270 198 L 330 198 Q 342 198 342 193 L 348 132 Z"/></clipPath>
+        <clipPath id="clipC"><path d="M 432 167 L 434 193 Q 434 198 442 198 L 478 198 Q 486 198 486 193 L 488 167 Z"/></clipPath>
+      </defs>
+      <ellipse cx="100" cy="200" rx="80" ry="6" fill="rgba(60,40,20,0.08)"/>
+      <ellipse cx="300" cy="200" rx="55" ry="5" fill="rgba(60,40,20,0.08)"/>
+      <ellipse cx="460" cy="200" rx="35" ry="4" fill="rgba(60,40,20,0.08)"/>
+      <g filter="url(#sd)">
+        <path d="M 40 110 Q 40 180 100 185 Q 160 180 160 110 Z" fill="white" stroke="#c8302c" stroke-width="2"/>
+        ${gaiwanFill > 0.02 ? `
+          <rect x="40" y="${185 - 73*gaiwanFill}" width="120" height="${73*gaiwanFill}" fill="url(#tg-${colorIdx})" clip-path="url(#clipG)"/>
+          <ellipse cx="100" cy="${185 - 73*gaiwanFill}" rx="${56 - 22*(1-gaiwanFill)}" ry="3" fill="${teaColor(colorIdx,.55)}"/>
+        ` : ''}
+        <ellipse cx="100" cy="110" rx="60" ry="8" fill="white" stroke="#c8302c" stroke-width="2"/>
+        <ellipse cx="100" cy="110" rx="56" ry="5" fill="${gaiwanFill>0.02?teaColor(colorIdx,.75):'#fdfbf7'}"/>
+        ${(phase === 'idle' || phase === 'steep') ? `
+          <ellipse cx="100" cy="98" rx="62" ry="6" fill="white" stroke="#c8302c" stroke-width="2"/>
+          <path d="M 38 98 Q 100 75 162 98" fill="none" stroke="#c8302c" stroke-width="2"/>
+          <circle cx="100" cy="82" r="5" fill="#c8302c"/>
+        ` : ''}
+        ${phase === 'steep' ? `
+          <g opacity="0.8">
+            <circle cx="80" cy="60" r="${4+Math.sin(phaseT*8)*2}" fill="url(#steam)"/>
+            <circle cx="100" cy="48" r="${5+Math.cos(phaseT*7)*2}" fill="url(#steam)"/>
+            <circle cx="120" cy="62" r="${4+Math.sin(phaseT*9)*2}" fill="url(#steam)"/>
+          </g>
+        ` : ''}
+        <path d="M 50 140 Q 100 145 150 140" stroke="#c8302c" stroke-width="0.8" fill="none" opacity="0.5"/>
+      </g>
+      ${phase === 'drain' ? `<path d="M 160 130 Q 200 ${130 + 40*phaseT} 245 165" stroke="${tea}" stroke-width="${4 - 2*phaseT}" fill="none" opacity="0.85"/>` : ''}
+      <g filter="url(#sd)">
+        <path d="M 250 130 L 256 195 Q 256 200 270 200 L 330 200 Q 344 200 344 195 L 350 130 Z" fill="white" stroke="#c8302c" stroke-width="2"/>
+        ${pitcherFill > 0.02 ? `
+          <rect x="250" y="${200 - 70*pitcherFill}" width="100" height="${70*pitcherFill}" fill="url(#tg-${colorIdx})" clip-path="url(#clipP)"/>
+          <ellipse cx="300" cy="${200 - 70*pitcherFill}" rx="${48 - 8*(1-pitcherFill)}" ry="2" fill="${teaColor(colorIdx,.55)}"/>
+        ` : ''}
+        <path d="M 350 130 L 360 122 L 358 138 Z" fill="white" stroke="#c8302c" stroke-width="2"/>
+        <ellipse cx="300" cy="130" rx="50" ry="5" fill="white" stroke="#c8302c" stroke-width="2"/>
+      </g>
+      ${phase === 'pourCup' ? `<path d="M 360 132 Q 410 ${135 + 30*phaseT} 450 168" stroke="${tea}" stroke-width="${3 - 1.5*phaseT}" fill="none" opacity="0.85"/>` : ''}
+      <g filter="url(#sd)">
+        <path d="M 430 165 L 432 195 Q 432 200 442 200 L 478 200 Q 488 200 488 195 L 490 165 Z" fill="white" stroke="#c8302c" stroke-width="2"/>
+        ${cupFill > 0.02 ? `
+          <rect x="430" y="${200 - 35*cupFill}" width="60" height="${35*cupFill}" fill="url(#tg-${colorIdx})" clip-path="url(#clipC)"/>
+          <ellipse cx="460" cy="${200 - 35*cupFill}" rx="${28 - 4*(1-cupFill)}" ry="1.5" fill="${teaColor(colorIdx,.55)}"/>
+        ` : ''}
+        <ellipse cx="460" cy="165" rx="30" ry="3.5" fill="white" stroke="#c8302c" stroke-width="2"/>
+      </g>
+      <text x="100" y="218" text-anchor="middle" fill="#8a7a68" font-size="11">盖碗</text>
+      <text x="300" y="218" text-anchor="middle" fill="#8a7a68" font-size="11">公道杯</text>
+      <text x="460" y="218" text-anchor="middle" fill="#8a7a68" font-size="11">品茗杯</text>
+    `;
+
+    if (phase === 'idle') {
+      stepTag.textContent = '未开始';
+      stepTag.className = 'brew-step-tag idle';
+      hintEl.textContent = '点击「开始」启动冲泡演示';
+      barFill.style.width = '0%';
+      elapsedEl.textContent = '0.0';
+      targetEl.textContent = '--';
+    } else if (currentStep < p.brew.steps.length) {
+      const s = p.brew.steps[currentStep];
+      stepTag.textContent = `第 ${s.n} 泡 / 共 ${p.brew.steps.length}`;
+      stepTag.className = 'brew-step-tag active';
+      const labels = { pour:'⤵ 注水中', steep:'🍵 闷泡浸出 — ' + s.hint, drain:'⤴ 出汤至公道杯', pourCup:'🍷 分至品茗杯' };
+      hintEl.textContent = labels[phase] || s.hint;
+      elapsedEl.textContent = elapsed.toFixed(1);
+      targetEl.textContent = s.time;
+      barFill.style.width = (progress*100) + '%';
+    } else {
+      stepTag.textContent = '✓ 全部完成';
+      stepTag.className = 'brew-step-tag done';
+      hintEl.textContent = '🌿 余韵悠长，可重置再来一遍';
+      barFill.style.width = '100%';
+    }
+  }
+
+  function renderAll() { draw(); renderTimeline(); }
+  renderAll();
+
+  function tick() {
+    if (paused || timer === null) return;
+    if (currentStep >= p.brew.steps.length) { stop(); return; }
+    const s = p.brew.steps[currentStep];
+    const dt = 0.05 * speed;
+    const norm = elapsed / s.time;
+    const pourEnd = 0.18, drainStart = 0.85, cupStart = 0.94;
+    if (norm < pourEnd) { phase = 'pour'; phaseT = norm / pourEnd; }
+    else if (norm < drainStart) { phase = 'steep'; phaseT = (norm - pourEnd) / (drainStart - pourEnd); }
+    else if (norm < cupStart) { phase = 'drain'; phaseT = (norm - drainStart) / (cupStart - drainStart); }
+    else { phase = 'pourCup'; phaseT = Math.min(1, (norm - cupStart) / (1 - cupStart)); }
+    elapsed += dt;
+    if (elapsed >= s.time) {
+      elapsed = 0; currentStep++;
+      phase = currentStep < p.brew.steps.length ? 'pour' : 'done';
+    }
+    renderAll();
+  }
+  function stop() { if (timer) clearInterval(timer); timer = null; phase = 'done'; renderAll(); }
+
   document.getElementById('brewStart').onclick = () => {
     if (timer) return;
-    currentStep = 0; elapsed = 0;
-    timer = setInterval(() => {
-      elapsed += 0.1;
-      const cur = p.brew.steps[currentStep];
-      if (elapsed >= cur.time) {
-        elapsed = 0;
-        currentStep++;
-        if (currentStep >= p.brew.steps.length) {
-          clearInterval(timer); timer=null;
-          currentStep = p.brew.steps.length;
-        }
-      }
-      draw();
-    }, 100);
+    paused = false;
+    if (currentStep >= p.brew.steps.length) { currentStep = 0; elapsed = 0; }
+    phase = 'pour';
+    timer = setInterval(tick, 50);
+  };
+  document.getElementById('brewPause').onclick = () => {
+    paused = !paused;
+    document.getElementById('brewPause').textContent = paused ? '▶ 继续' : '⏸ 暂停';
   };
   document.getElementById('brewReset').onclick = () => {
-    if (timer) clearInterval(timer); timer=null;
-    currentStep = 0; elapsed = 0; draw();
+    if (timer) clearInterval(timer); timer = null;
+    currentStep = 0; elapsed = 0; phase = 'idle'; paused = false;
+    document.getElementById('brewPause').textContent = '⏸ 暂停';
+    renderAll();
   };
+  speedBtn.onclick = () => {
+    speed = speed === 1 ? 2 : (speed === 2 ? 4 : 1);
+    speedVal.textContent = speed;
+  };
+  timeline.addEventListener('click', e => {
+    const cell = e.target.closest('.tl-cell');
+    if (!cell) return;
+    currentStep = parseInt(cell.dataset.idx);
+    elapsed = 0; phase = 'pour';
+    renderAll();
+  });
 }
 renderKB();
 
@@ -637,13 +767,155 @@ archTbody.innerHTML = ARCH_TABLE.map(r => `
 `).join('');
 
 // =================================================================
-// 角色切换
+// 角色驱动：换仪表盘 / Tab 排序 / 欢迎语 / 推荐问题
 // =================================================================
-document.getElementById('role').addEventListener('change', e => {
-  const map = {
-    franchisee: '已切换为「加盟商店长」视角 — 重点查看运营驾驶舱、库存、销售建议',
-    staff: '已切换为「茶艺师 / 销售顾问」视角 — 重点关注 SOP、话术、培训题',
-    hq: '已切换为「总部研发 / 运营」视角 — 关注全网知识同步、知识缺口、加盟商画像'
-  };
-  appendMsg(map[e.target.value], 'ai');
-});
+const ROLE_PROFILES = {
+  franchisee: {
+    label: '加盟商店长',
+    welcome: '👋 张店长，您好！我已为您切换到「店长视角」。今日重点：① 老枞水仙库存预警；② 立夏新品已就绪；③ 员工李静需 5 分钟带教。',
+    suggestions: ['今日应该主推什么茶？','库存还能撑几天？','客人说价格贵怎么办？','员工培训进度如何？','本周销售目标差多少？'],
+    metrics: [
+      { k:'本店今日营业额', v:'¥ 12,840', d:'↑ 12.3% vs 昨日' },
+      { k:'本店今日客流', v:'287', d:'峰值 14:32' },
+      { k:'热销品类', v:'老枞水仙', d:'占比 38%' },
+      { k:'库存预警', v:'2 项', d:'老枞水仙 / 半天夭', dn:true },
+      { k:'员工今日学习', v:'4 / 6', d:'李静缺勤' },
+      { k:'AI 建议采纳', v:'5 / 6', d:'本周 ↑ 18%' },
+      { k:'客户满意度', v:'4.7 ★', d:'本月 +0.2' },
+      { k:'本月达成率', v:'87%', d:'目标 100%' }
+    ],
+    tabsOrder: ['ops','assistant','kb','training','overview','vision','kg','arch'],
+    tabsHide: [],
+    feed: [
+      { time:'09:42:18', html:'本店收到 3 条 AI 建议，已采纳 <b>补货老枞水仙</b>' },
+      { time:'09:43:02', html:'客人询问 <b>修身四大名丛</b>，员工成功推荐套装' },
+      { time:'09:43:25', html:'员工 <b>张茶艺师</b> 完成今日微学习' },
+      { time:'09:43:48', html:'<b>立夏新品</b> 已下发，话术已就绪' },
+      { time:'09:44:11', html:'本店当前评分 <b>4.7 ★</b>（区域排名 第 8）' },
+      { time:'09:44:30', html:'AI 预测明日客流 <b>320 人</b>，建议提前备料' }
+    ]
+  },
+  staff: {
+    label: '茶艺师 / 销售顾问',
+    welcome: '🍵 您好！我是您的 AI 学习伙伴。已为您切换到「茶艺师视角」。今日重点：① 复习老枞水仙 SOP；② 有 3 道新题；③ 立夏新品话术已上架。',
+    suggestions: ['母树大红袍怎么冲泡？','枞味是什么？','客人问产地怎么答？','修身四大名丛区别？','如何向客人推荐套装？'],
+    metrics: [
+      { k:'今日已学习', v:'8 min', d:'目标 10 min' },
+      { k:'连胜', v:'7 题', d:'本周新高' },
+      { k:'掌握知识点', v:'124 / 180', d:'↑ 12 本周' },
+      { k:'弱项', v:'3 个', d:'枞味/炭焙/朱子文化', dn:true },
+      { k:'今日服务客人', v:'42', d:'达成率 85%' },
+      { k:'转化率', v:'24%', d:'高于均值' },
+      { k:'话术使用', v:'18 次', d:'最常用：母树大红袍' },
+      { k:'本月学习排名', v:'#3', d:'门店内' }
+    ],
+    tabsOrder: ['training','assistant','kb','vision','kg','overview','ops','arch'],
+    tabsHide: ['ops','arch'],
+    feed: [
+      { time:'09:42:18', html:'您在「枞味三要素」答错 → 推送 <b>1 分钟微课</b>' },
+      { time:'09:43:02', html:'您完成 <b>第 7 题</b>，连胜 7 ✨' },
+      { time:'09:43:25', html:'AI 推送 <b>立夏白茶话术</b> 至您的学习清单' },
+      { time:'09:43:48', html:'本周已学 <b>11.2 分钟</b>，超过 87% 同岗位员工' },
+      { time:'09:44:11', html:'您的能力画像更新：朱子文化 70% → 75%' },
+      { time:'09:44:30', html:'今日服务转化率 <b>24%</b>，门店均值 19%' }
+    ]
+  },
+  hq: {
+    label: '总部研发 / 运营',
+    welcome: '🏢 总部研发您好。已为您切换到「总部视角」 — 全网 412 家门店实时态势、知识缺口、加盟商画像。本周新发现 6 处知识缺口待补充。',
+    suggestions: ['全网知识同步率？','哪些门店学习率最低？','本周新发现哪些知识缺口？','哪些产品销售下滑？','加盟商满意度如何？'],
+    metrics: [
+      { k:'覆盖门店', v:'412', d:'↑ 18 / 30 天' },
+      { k:'知识中枢条目', v:'8,427', d:'本周 +124' },
+      { k:'今日全网问答', v:'3,612', d:'峰值 14:32' },
+      { k:'RAG 命中率', v:'94.2%', d:'↑ 2.1pp' },
+      { k:'员工日均学习', v:'11.3 min', d:'完课率 87%' },
+      { k:'Agent 调用', v:'21,845', d:'采纳率 64%' },
+      { k:'新品发布周期', v:'22 h', d:'基线 ↓ 93%' },
+      { k:'视觉质检通过率', v:'91.6%', d:'一致性 ↑' }
+    ],
+    tabsOrder: ['overview','kg','arch','assistant','kb','training','ops','vision'],
+    tabsHide: [],
+    feed: [
+      { time:'09:42:18', html:'<b>福州·三坊七巷店</b> 提问「枞味」，命中标准 v1' },
+      { time:'09:43:02', html:'<b>厦门·SM店</b> 茶汤评分 92.4 ✓' },
+      { time:'09:43:25', html:'研发上传 <b>立夏白茶</b>，AI 自动分发 412 门店' },
+      { time:'09:44:11', html:'AI 发现 <b>知识缺口</b>：「白茶煮饮温度」3 次未命中' },
+      { time:'09:44:30', html:'<b>修身四大名丛</b> 知识点全网掌握度 68%（目标 80%）' },
+      { time:'09:45:34', html:'已生成《本周知识缺口报告》— 6 项待补充' }
+    ]
+  }
+};
+
+function applyRole(role) {
+  const profile = ROLE_PROFILES[role];
+  if (!profile) return;
+
+  // 1. 仪表盘指标重写
+  const grid = document.querySelector('#overview .dash-grid');
+  if (grid) {
+    grid.innerHTML = profile.metrics.map(m => `
+      <div class="card metric">
+        <h4>${m.k}</h4>
+        <div class="num">${m.v}</div>
+        <div class="delta ${m.dn?'down':''}">${m.d}</div>
+      </div>
+    `).join('');
+  }
+
+  // 2. 实时事件流重写
+  const feedBox = document.getElementById('liveFeed');
+  if (feedBox) {
+    feedBox.innerHTML = '';
+    profile.feed.forEach((e,i) => {
+      const div = document.createElement('div');
+      div.className = 'feed-item';
+      div.style.animationDelay = (i*150)+'ms';
+      div.innerHTML = `<span class="feed-time">${e.time}</span><span class="feed-text">${e.html}</span>`;
+      feedBox.appendChild(div);
+    });
+  }
+
+  // 3. Tab 重新排序与隐藏
+  const tabsBar = document.querySelector('.tabs');
+  const tabBtns = Array.from(tabsBar.querySelectorAll('.tab'));
+  const tabMap = {};
+  tabBtns.forEach(b => tabMap[b.dataset.tab] = b);
+  // 清空再按 order 顺序追加
+  tabsBar.innerHTML = '';
+  profile.tabsOrder.forEach(name => {
+    const btn = tabMap[name];
+    if (!btn) return;
+    if (profile.tabsHide.includes(name)) {
+      btn.style.display = 'none';
+    } else {
+      btn.style.display = '';
+    }
+    tabsBar.appendChild(btn);
+  });
+
+  // 4. 聊天欢迎语 + 推荐问题更新
+  appendMsg(profile.welcome, 'ai');
+  // 重写推荐问题
+  if (chatSuggest) {
+    chatSuggest.innerHTML = profile.suggestions.map(s => `<button>${s}</button>`).join('');
+    chatSuggest.querySelectorAll('button').forEach(b => {
+      b.addEventListener('click', () => { chatInput.value = b.textContent; sendMessage(); });
+    });
+  }
+
+  // 5. 切换到该角色的首选 Tab（若当前不可见）
+  const activeTab = document.querySelector('.tab.active');
+  if (activeTab && profile.tabsHide.includes(activeTab.dataset.tab)) {
+    const firstVisible = profile.tabsOrder.find(n => !profile.tabsHide.includes(n));
+    if (firstVisible) tabMap[firstVisible].click();
+  }
+
+  // 6. 重绘可能受影响的图表
+  if (document.getElementById('overview').classList.contains('active')) {
+    drawOverviewChart();
+  }
+}
+
+document.getElementById('role').addEventListener('change', e => applyRole(e.target.value));
+applyRole('franchisee'); // 默认按店长视角加载
