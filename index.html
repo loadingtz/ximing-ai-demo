@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>熹茗 AI 加盟商赋能平台 · Demo</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">熹</div>
+    <div>
+      <h1>熹茗 · AI 加盟商赋能平台</h1>
+      <p class="sub">新品知识 / 智能培训 / 运营驾驶舱 / 视觉质检 — 端到端 Demo</p>
+    </div>
+  </div>
+  <div class="role">
+    <select id="role">
+      <option value="franchisee">角色：加盟商店长</option>
+      <option value="staff">角色：门店店员</option>
+      <option value="hq">角色：总部运营</option>
+    </select>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-tab="assistant">① 新品AI助手</button>
+  <button class="tab" data-tab="kb">② 新品知识库</button>
+  <button class="tab" data-tab="training">③ 智能培训</button>
+  <button class="tab" data-tab="ops">④ 运营驾驶舱</button>
+  <button class="tab" data-tab="vision">⑤ 视觉质检</button>
+  <button class="tab" data-tab="arch">⑥ 架构&流程</button>
+</nav>
+
+<main>
+  <!-- 1. AI Assistant -->
+  <section id="assistant" class="panel active">
+    <div class="panel-head">
+      <h2>新品 AI 助手 — 自然语言问答</h2>
+      <p>基于 RAG（检索增强生成）+ 总部新品知识库，实时为加盟商解答配方、出品、营销话术等问题。</p>
+    </div>
+    <div class="chat">
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="chat-suggest" id="chatSuggest"></div>
+      <div class="chat-input">
+        <input id="chatInput" placeholder="问问我：例如「桂花乌龙的SOP是什么？」" />
+        <button id="sendBtn">发送</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Knowledge Base -->
+  <section id="kb" class="panel">
+    <div class="panel-head">
+      <h2>新品知识库 — 总部统一发布</h2>
+      <p>每一款新品由总部一次录入，AI 自动生成话术、SOP 卡片、培训题、营销文案，全网门店秒级同步。</p>
+    </div>
+    <div class="kb-grid" id="kbGrid"></div>
+    <div class="kb-detail" id="kbDetail"></div>
+  </section>
+
+  <!-- 3. Training -->
+  <section id="training" class="panel">
+    <div class="panel-head">
+      <h2>智能培训 — AI 出题 & 个性化学习</h2>
+      <p>系统根据员工岗位、历史薄弱点自动出题；答错即时讲解，学习时长从 2 周缩短至 2 天。</p>
+    </div>
+    <div class="quiz-wrap">
+      <div class="quiz-stats">
+        <div><span id="qScore">0</span><small>已答对</small></div>
+        <div><span id="qTotal">0</span><small>已作答</small></div>
+        <div><span id="qStreak">0</span><small>连胜</small></div>
+      </div>
+      <div class="quiz-card" id="quizCard"></div>
+    </div>
+  </section>
+
+  <!-- 4. Ops Dashboard -->
+  <section id="ops" class="panel">
+    <div class="panel-head">
+      <h2>运营驾驶舱 — AI 给加盟商「具体建议」</h2>
+      <p>不是只给数字，而是直接告诉店长「今天该补什么货、推什么品、调什么班」。</p>
+    </div>
+    <div class="ops-grid">
+      <div class="card kpi"><h3>今日营业额</h3><div class="big">¥ 8,642</div><div class="trend up">+12.3% vs 昨日</div></div>
+      <div class="card kpi"><h3>新品占比</h3><div class="big">28.5%</div><div class="trend up">达成目标 25%</div></div>
+      <div class="card kpi"><h3>客单价</h3><div class="big">¥ 32.1</div><div class="trend down">-3.2%</div></div>
+      <div class="card kpi"><h3>预估浪费</h3><div class="big">¥ 186</div><div class="trend down">低于均值</div></div>
+    </div>
+    <div class="ops-advice">
+      <h3>🤖 AI 今日运营建议</h3>
+      <ul id="adviceList"></ul>
+    </div>
+    <div class="ops-chart">
+      <h3>近 7 天 新品 vs 经典款 销售曲线</h3>
+      <canvas id="salesChart" width="800" height="220"></canvas>
+    </div>
+  </section>
+
+  <!-- 5. Vision QA -->
+  <section id="vision" class="panel">
+    <div class="panel-head">
+      <h2>视觉质检 — 出品标准化</h2>
+      <p>店员上传出品照片，AI 比对总部标准图，给出色泽、分量、装饰、温度的偏差评分。</p>
+    </div>
+    <div class="vision-wrap">
+      <div class="vision-upload">
+        <label class="drop" id="dropZone">
+          <input type="file" id="fileInput" accept="image/*" />
+          <span>📷 点击或拖拽上传出品照片<br/><small>（Demo 不上传到服务器，仅本地分析模拟）</small></span>
+        </label>
+        <div class="vision-preview" id="visionPreview"></div>
+      </div>
+      <div class="vision-result" id="visionResult">
+        <div class="empty">上传后将显示 AI 评分与改进建议</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Architecture -->
+  <section id="arch" class="panel">
+    <div class="panel-head">
+      <h2>架构与落地流程</h2>
+      <p>下方为本方案完整技术架构与从总部研发 → 加盟商门店的流转流程。</p>
+    </div>
+    <div class="arch-diagram">
+      <div class="arch-row">
+        <div class="arch-node hq">总部 R&D<br/><small>新品立项 / 配方 / 视频</small></div>
+        <div class="arrow">→</div>
+        <div class="arch-node ai">AI 知识中台<br/><small>多模态解析 · 向量化 · 知识图谱</small></div>
+        <div class="arrow">→</div>
+        <div class="arch-node hub">分发层<br/><small>话术 / SOP / 题库 / 文案</small></div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-node store">加盟商门店<br/><small>店长 / 店员 App + 平板</small></div>
+        <div class="arrow">←</div>
+        <div class="arch-node app">门店应用层<br/><small>问答 / 培训 / 驾驶舱 / 质检</small></div>
+        <div class="arrow">←</div>
+        <div class="arch-node llm">大模型推理<br/><small>RAG + Function Call</small></div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-node feedback">运营反馈回流<br/><small>销售 / 评价 / 问答日志 → 持续训练</small></div>
+      </div>
+    </div>
+    <div class="arch-table">
+      <h3>业务环节 ↔ AI 技术映射</h3>
+      <table>
+        <thead><tr><th>业务痛点</th><th>AI 技术</th><th>技术团队交付</th><th>预期收益</th></tr></thead>
+        <tbody id="archTable"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div>© 熹茗 AI 加盟商赋能平台 · Demo · 2026</div>
+  <div>方案文档：<a href="docs/熹茗AI加盟商赋能落地方案.docx">下载 Word 完整方案 ↓</a></div>
+</footer>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
